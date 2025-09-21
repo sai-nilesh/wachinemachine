@@ -74,7 +74,6 @@
 <body>
   <h1>🧺 Washing Machine Slot Booking</h1>
 
-  <!-- Booking Form -->
   <div class="container">
     <form id="bookingForm">
       <label for="name">Your Name</label>
@@ -97,32 +96,28 @@
     </form>
   </div>
 
-  <!-- Bookings List -->
   <div class="container">
     <h2>📅 Current Bookings</h2>
     <div id="bookings"></div>
   </div>
 
-  <!-- Firebase SDKs -->
   <script type="module">
     import { initializeApp } 
       from "https://www.gstatic.com/firebasejs/10.14.0/firebase-app.js";
     import { 
-      getFirestore, collection, addDoc, query, orderBy, onSnapshot 
+      getFirestore, collection, addDoc, query, onSnapshot, getDocs, where 
     } from "https://www.gstatic.com/firebasejs/10.14.0/firebase-firestore.js";
 
-    // ✅ Replace with your own Firebase config
+    // Firebase config
     const firebaseConfig = {
-  apiKey: "AIzaSyCqdR__9X_yHqjU5B9nv3Yhl0IWjlPT6mU",
-  authDomain: "wachine-machine-slot-booking.firebaseapp.com",
-  projectId: "wachine-machine-slot-booking",
-  storageBucket: "wachine-machine-slot-booking.firebasestorage.app",
-  messagingSenderId: "336066035112",
-  appId: "1:336066035112:web:760f5b3f19bb5fa457f19d",
-  measurementId: "G-CW2RRKXMLH"
-};
+      apiKey: "AIzaSyCqdR__9X_yHqjU5B9nv3Yhl0IWjlPT6mU",
+      authDomain: "wachine-machine-slot-booking.firebaseapp.com",
+      projectId: "wachine-machine-slot-booking",
+      storageBucket: "wachine-machine-slot-booking.appspot.com",
+      messagingSenderId: "336066035112",
+      appId: "1:336066035112:web:760f5b3f19bb5fa457f19d"
+    };
 
-    // Init Firebase
     const app = initializeApp(firebaseConfig);
     const db = getFirestore(app);
     const bookingsRef = collection(db, "bookings");
@@ -130,36 +125,51 @@
     const form = document.getElementById("bookingForm");
     const bookingsDiv = document.getElementById("bookings");
 
-    // Convert HH:MM string → total minutes
     function timeToMinutes(t) {
       const [h, m] = t.split(":").map(Number);
       return h * 60 + m;
     }
 
-    // Convert minutes → readable string
     function minutesToTimeString(minutes) {
       const h = Math.floor(minutes / 60) % 24;
       const m = minutes % 60;
-      return new Date(0, 0, 0, h, m)
-        .toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+      return new Date(0,0,0,h,m).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
     }
 
     // Handle booking submission
     form.addEventListener("submit", async (e) => {
       e.preventDefault();
+
       const name = document.getElementById("name").value.trim();
       const date = document.getElementById("date").value;
       const startTime = document.getElementById("startTime").value;
       const duration = parseInt(document.getElementById("duration").value);
 
-      if (!name || !date || !startTime || !duration) {
-        alert("Please fill all fields properly.");
+      if (duration > 3) {
+        alert("Maximum duration is 3 hours!");
         return;
       }
 
       const startMinutes = timeToMinutes(startTime);
       const endMinutes = startMinutes + duration * 60;
 
+      // Check for overlapping bookings
+      const q = query(bookingsRef, where("date", "==", date));
+      const snapshot = await getDocs(q);
+      let overlap = false;
+      snapshot.forEach(doc => {
+        const b = doc.data();
+        if (startMinutes < b.endMinutes && endMinutes > b.startMinutes) {
+          overlap = true;
+        }
+      });
+
+      if (overlap) {
+        alert("❌ Slot already booked during this time!");
+        return;
+      }
+
+      // Save booking
       try {
         await addDoc(bookingsRef, {
           name, date, startTime, duration,
@@ -169,29 +179,33 @@
         form.reset();
         alert("✅ Slot booked successfully!");
       } catch (err) {
-        console.error("Error booking slot:", err);
+        console.error(err);
         alert("❌ Error booking slot, try again.");
       }
     });
 
-    // Live bookings display
-    const q = query(bookingsRef, orderBy("date"), orderBy("startMinutes"));
-    onSnapshot(q, (snapshot) => {
+    // Live display of upcoming bookings
+    onSnapshot(bookingsRef, (snapshot) => {
       bookingsDiv.innerHTML = "";
-      if (snapshot.empty) {
-        bookingsDiv.innerHTML = "<p>No slots booked yet.</p>";
-        return;
-      }
+      const now = new Date();
+      const today = now.toISOString().slice(0,10); // YYYY-MM-DD
+      const nowMinutes = now.getHours()*60 + now.getMinutes();
+
       snapshot.forEach(doc => {
         const b = doc.data();
-        const div = document.createElement("div");
-        div.className = "booking";
-        div.innerHTML = `
-          <strong>${b.name}</strong><br>
-          ${b.date} | ${minutesToTimeString(b.startMinutes)} → ${minutesToTimeString(b.endMinutes)}
-        `;
-        bookingsDiv.appendChild(div);
+        // show only upcoming or ongoing bookings
+        if (b.date > today || (b.date === today && b.endMinutes > nowMinutes)) {
+          const div = document.createElement("div");
+          div.className = "booking";
+          div.innerHTML = `
+            <strong>${b.name}</strong><br>
+            ${b.date} | ${minutesToTimeString(b.startMinutes)} → ${minutesToTimeString(b.endMinutes)}
+          `;
+          bookingsDiv.appendChild(div);
+        }
       });
+
+      if (!bookingsDiv.innerHTML) bookingsDiv.innerHTML = "<p>No upcoming slots.</p>";
     });
   </script>
 </body>
