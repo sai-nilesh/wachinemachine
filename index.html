@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Washing Machine Slot Booking</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <style>
+    body {
+      font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+      background: linear-gradient(135deg, #74ebd5 0%, #ACB6E5 100%);
+      margin: 0;
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+    h1 {
+      text-align: center;
+      color: #333;
+      margin-bottom: 20px;
+    }
+    .container {
+      max-width: 600px;
+      width: 100%;
+      background: white;
+      padding: 20px;
+      border-radius: 15px;
+      box-shadow: 0 8px 20px rgba(0,0,0,0.1);
+      margin-bottom: 30px;
+    }
+    label {
+      font-weight: 600;
+      margin-top: 10px;
+      display: block;
+      color: #444;
+    }
+    input, select, button {
+      width: 100%;
+      padding: 10px;
+      margin-top: 5px;
+      margin-bottom: 15px;
+      border: 1px solid #ddd;
+      border-radius: 8px;
+      font-size: 14px;
+    }
+    button {
+      background: #4CAF50;
+      color: white;
+      border: none;
+      font-weight: bold;
+      cursor: pointer;
+      transition: background 0.3s ease;
+    }
+    button:hover {
+      background: #45a049;
+    }
+    .booking {
+      background: #f9f9f9;
+      border-left: 5px solid #4CAF50;
+      padding: 10px 15px;
+      margin: 10px 0;
+      border-radius: 8px;
+      font-size: 14px;
+    }
+    .booking strong {
+      color: #333;
+    }
+    @media (max-width: 600px) {
+      .container { padding: 15px; }
+      input, select, button { font-size: 13px; }
+    }
+  </style>
+</head>
+<body>
+  <h1>🧺 Washing Machine Slot Booking</h1>
+
+  <!-- Booking Form -->
+  <div class="container">
+    <form id="bookingForm">
+      <label for="name">Your Name</label>
+      <input type="text" id="name" placeholder="Enter your name" required>
+
+      <label for="date">Select Date</label>
+      <input type="date" id="date" required>
+
+      <label for="startTime">Start Time</label>
+      <input type="time" id="startTime" required>
+
+      <label for="duration">Duration (hours, max 3)</label>
+      <select id="duration" required>
+        <option value="1">1 hour</option>
+        <option value="2">2 hours</option>
+        <option value="3">3 hours</option>
+      </select>
+
+      <button type="submit">Book Slot</button>
+    </form>
+  </div>
+
+  <!-- Bookings List -->
+  <div class="container">
+    <h2>📅 Current Bookings</h2>
+    <div id="bookings"></div>
+  </div>
+
+  <!-- Firebase SDKs -->
+  <script type="module">
+    import { initializeApp } 
+      from "https://www.gstatic.com/firebasejs/10.14.0/firebase-app.js";
+    import { 
+      getFirestore, collection, addDoc, query, orderBy, onSnapshot 
+    } from "https://www.gstatic.com/firebasejs/10.14.0/firebase-firestore.js";
+
+    // ✅ Replace with your own Firebase config
+    const firebaseConfig = {
+  apiKey: "AIzaSyCqdR__9X_yHqjU5B9nv3Yhl0IWjlPT6mU",
+  authDomain: "wachine-machine-slot-booking.firebaseapp.com",
+  projectId: "wachine-machine-slot-booking",
+  storageBucket: "wachine-machine-slot-booking.firebasestorage.app",
+  messagingSenderId: "336066035112",
+  appId: "1:336066035112:web:760f5b3f19bb5fa457f19d",
+  measurementId: "G-CW2RRKXMLH"
+};
+
+    // Init Firebase
+    const app = initializeApp(firebaseConfig);
+    const db = getFirestore(app);
+    const bookingsRef = collection(db, "bookings");
+
+    const form = document.getElementById("bookingForm");
+    const bookingsDiv = document.getElementById("bookings");
+
+    // Convert HH:MM string → total minutes
+    function timeToMinutes(t) {
+      const [h, m] = t.split(":").map(Number);
+      return h * 60 + m;
+    }
+
+    // Convert minutes → readable string
+    function minutesToTimeString(minutes) {
+      const h = Math.floor(minutes / 60) % 24;
+      const m = minutes % 60;
+      return new Date(0, 0, 0, h, m)
+        .toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+    }
+
+    // Handle booking submission
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const name = document.getElementById("name").value.trim();
+      const date = document.getElementById("date").value;
+      const startTime = document.getElementById("startTime").value;
+      const duration = parseInt(document.getElementById("duration").value);
+
+      if (!name || !date || !startTime || !duration) {
+        alert("Please fill all fields properly.");
+        return;
+      }
+
+      const startMinutes = timeToMinutes(startTime);
+      const endMinutes = startMinutes + duration * 60;
+
+      try {
+        await addDoc(bookingsRef, {
+          name, date, startTime, duration,
+          startMinutes, endMinutes,
+          createdAt: new Date()
+        });
+        form.reset();
+        alert("✅ Slot booked successfully!");
+      } catch (err) {
+        console.error("Error booking slot:", err);
+        alert("❌ Error booking slot, try again.");
+      }
+    });
+
+    // Live bookings display
+    const q = query(bookingsRef, orderBy("date"), orderBy("startMinutes"));
+    onSnapshot(q, (snapshot) => {
+      bookingsDiv.innerHTML = "";
+      if (snapshot.empty) {
+        bookingsDiv.innerHTML = "<p>No slots booked yet.</p>";
+        return;
+      }
+      snapshot.forEach(doc => {
+        const b = doc.data();
+        const div = document.createElement("div");
+        div.className = "booking";
+        div.innerHTML = `
+          <strong>${b.name}</strong><br>
+          ${b.date} | ${minutesToTimeString(b.startMinutes)} → ${minutesToTimeString(b.endMinutes)}
+        `;
+        bookingsDiv.appendChild(div);
+      });
+    });
+  </script>
+</body>
+</html>
